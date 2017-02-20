@@ -1,13 +1,13 @@
-# Sempahore
+# Semaphore
 
-[![Master](https://travis-ci.org/hammerandchisel/sempahore.svg?branch=master)](https://travis-ci.org/hammerandchisel/sempahore)
-[![Hex.pm Version](http://img.shields.io/hexpm/v/sempahore.svg?style=flat)](https://hex.pm/packages/sempahore)
+[![Master](https://travis-ci.org/hammerandchisel/semaphore.svg?branch=master)](https://travis-ci.org/hammerandchisel/semaphore)
+[![Hex.pm Version](http://img.shields.io/hexpm/v/semaphore.svg?style=flat)](https://hex.pm/packages/semaphore)
 
 Programming in Erlang and Elixir usually allows for no locking since the VM essentially handles it for you when
 communicating between processes. However, what about the situation when you have thousands of processes attempting
 to interact with a single resource such as a process? Usually they will overload the process and explode the
 message queue. ETS is the Swiss Army knife of the Erlang VM and can be applied to this problem. By using `:ets.update_counter`
-and `:write_concurrency` we can achieve a **fast** low contention sempahore on ETS.
+and `:write_concurrency` we can achieve a **fast** low contention semaphore on ETS.
 
 ## Usage
 
