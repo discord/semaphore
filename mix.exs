@@ -4,11 +4,11 @@ defmodule Semaphore.Mixfile do
   def project do
     [
       app: :semaphore,
-      version: "0.0.2",
-      elixir: "~> 1.2",
+      version: "1.0.0",
+      elixir: "~> 1.3",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      deps: deps
+      deps: deps(),
     ]
   end
 
@@ -21,5 +21,18 @@ defmodule Semaphore.Mixfile do
 
   defp deps do
     []
+  end
+
+  def package do
+    [
+      name: :semaphore,
+      description: "Fast semaphore using ETS.",
+      maintainers: [],
+      licenses: ["MIT"],
+      files: ["lib/*", "mix.exs", "README*", "LICENSE*"],
+      links: %{
+        "GitHub" => "https://github.com/hammerandchisel/semaphore",
+      },
+    ]
   end
 end
