@@ -17,22 +17,9 @@ defmodule Semaphore do
   """
   @spec acquire(term, integer) :: boolean
   def acquire(name, max) do
-    try do
-      case ETS.update_counter(@table, name, [{2, 0}, {2, 1, max, max}]) do
-        [^max, ^max] ->
-          false
-        [_, count] when count <= max ->
-          true
-        [_, ^max] ->
-          true
-      end
-    rescue
-      ArgumentError ->
-        if ETS.insert_new(@table, {name, 1}) do
-          true
-        else
-          acquire(name, max)
-        end
+    case ETS.update_counter(@table, name, [{2, 0}, {2, 1, max, max}], {name, 0}) do
+      [^max, _] -> false
+      _ -> true
     end
   end
 
@@ -51,8 +38,8 @@ defmodule Semaphore do
   @spec count(term) :: integer
   def count(name) do
     case ETS.lookup(@table, name) do
-      [{^name, count}] -> count
-      [] -> 0
+      [{_, count}] -> count
+      _ -> 0
     end
   end
 
