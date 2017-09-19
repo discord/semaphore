@@ -1,6 +1,6 @@
 # Semaphore
 
-[![Master](https://travis-ci.org/hammerandchisel/semaphore.svg?branch=master)](https://travis-ci.org/hammerandchisel/semaphore)
+[![Master](https://travis-ci.org/discordapp/semaphore.svg?branch=master)](https://travis-ci.org/discordapp/semaphore)
 [![Hex.pm Version](http://img.shields.io/hexpm/v/semaphore.svg?style=flat)](https://hex.pm/packages/semaphore)
 
 Programming in Erlang and Elixir usually allows for no locking since the VM essentially handles it for you when

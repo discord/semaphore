@@ -32,7 +32,7 @@ defmodule Semaphore.Mixfile do
       licenses: ["MIT"],
       files: ["lib/*", "mix.exs", "README*", "LICENSE*"],
       links: %{
-        "GitHub" => "https://github.com/hammerandchisel/semaphore",
+        "GitHub" => "https://github.com/discordapp/semaphore",
       },
     ]
   end
