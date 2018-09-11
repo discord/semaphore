@@ -1,8 +1,11 @@
 defmodule SemaphoreTest do
   use ExUnit.Case, async: false
 
-  test "acquire" do
+  setup do
     Semaphore.reset(:foo)
+  end
+
+  test "acquire" do
     assert Semaphore.count(:foo) == 0
     assert Semaphore.acquire(:foo, 1) == true
     assert Semaphore.count(:foo) == 1
@@ -15,7 +18,6 @@ defmodule SemaphoreTest do
   end
 
   test "release" do
-    Semaphore.reset(:foo)
     assert Semaphore.acquire(:foo, 1) == true
     assert Semaphore.release(:foo) == :ok
     assert Semaphore.release(:foo) == :ok
@@ -26,17 +28,35 @@ defmodule SemaphoreTest do
   end
 
   test "increase max" do
-    Semaphore.reset(:foo)
     assert Semaphore.acquire(:foo, 1) == true
     assert Semaphore.acquire(:foo, 3) == true
     assert Semaphore.acquire(:foo, 3) == true
   end
 
   test "call" do
-    Semaphore.reset(:foo)
     assert Semaphore.call(:foo, 1, fn -> :bar end) == :bar
     assert Semaphore.count(:foo) == 0
     assert Semaphore.acquire(:foo, 1) == true
     assert Semaphore.call(:foo, 1, fn -> :bar end) == {:error, :max}
+  end
+
+  test "call_linksafe" do
+    # Spawn a process that will exit due to a linked process exiting.
+    {pid, ref} = spawn_monitor(fn ->
+      Semaphore.call_linksafe(:foo, 5, fn ->
+        spawn_link(fn -> exit(:ded) end)
+        Process.sleep(:infinity)
+      end)
+    end)
+    # Wait for the process to die.
+    assert_receive {:DOWN, ^ref, :process, ^pid, :ded}
+    # The leak should have occurred.
+    assert Semaphore.count(:foo) == 1
+    # Force a sweep.
+    Semaphore |> send(:timeout)
+    # This is just so that we can ensure the sweep was processed.
+    Semaphore |> :sys.get_state()
+    # The leak should now be fixed.
+    assert Semaphore.count(:foo) == 0
   end
 end

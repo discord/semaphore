@@ -2,14 +2,20 @@ defmodule Semaphore do
   alias :ets, as: ETS
 
   @table :semaphore
+  @call_safe_table :semaphore_call_safe
 
   ## Application Callbacks
+  use GenServer
 
   def start(_type, _args) do
     import Supervisor.Spec, warn: false
-    Supervisor.start_link([worker(Agent, [&init/0])], strategy: :one_for_one)
+    Supervisor.start_link([worker(__MODULE__, [])], strategy: :one_for_one)
   end
 
+  def start_link() do
+    sweep_interval = Application.get_env(:semaphore, :sweep_interval, 5_000)
+    GenServer.start_link(__MODULE__, sweep_interval, name: __MODULE__)
+  end
   ## Client API
 
   @doc """
@@ -83,9 +89,60 @@ defmodule Semaphore do
     end
   end
 
+  @doc """
+  Attempt to acquire a semaphore and call a function that might link to another process, and then automatically release.
+
+  If the current process dies in a way that is unable to be caught by the try block (e.g. a linked process dies, while
+  `func` is being called. The semaphore will be automatically released by the sweeper in the background.
+
+  This function has higher overhead than `call/3` and should only be used if you know that you might be linking to
+  something in the func.
+  """
+  @spec call_linksafe(term, integer, function) :: term | {:error, :max}
+  def call_linksafe(_name, -1, func), do: func.()
+  def call_linksafe(_name, 0, _func), do: {:error, :max}
+  def call_linksafe(name, max, func) do
+    if acquire(name, max) do
+      safe_key = {name, self()}
+      inserted = ETS.insert_new(@call_safe_table, [safe_key])
+      try do
+        func.()
+      after
+        if inserted do
+          ETS.delete(@call_safe_table, safe_key)
+        end
+        release(name)
+      end
+    else
+      {:error, :max}
+    end
+  end
+
   ## Private
 
-  defp init do
+  def init(sweep_interval) do
     ETS.new(@table, [:set, :public, :named_table, {:write_concurrency, true}])
+    ETS.new(@call_safe_table, [:set, :public, :named_table, {:write_concurrency, true}])
+    {:ok, sweep_interval, sweep_interval}
+  end
+
+  def handle_info(:timeout, sweep_interval) do
+    do_sweep()
+    {:noreply, sweep_interval, sweep_interval}
+  end
+
+  defp do_sweep() do
+    ETS.foldl(
+      fn ({name, pid} = key, :ok) ->
+        with false <- Process.alive?(pid),
+             1 <- :ets.select_delete(@call_safe_table, [{key, [], [true]}]) do
+          release(name)
+        else
+          _ -> :ok
+        end
+      end,
+      :ok,
+      @call_safe_table
+    )
   end
 end
