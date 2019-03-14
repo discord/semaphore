@@ -15,7 +15,7 @@ Add it to `mix.exs`
 
 ```elixir
 defp deps do
-  [{:semaphore, "~> 1.0"}]
+  [{:semaphore, "~> 1.1"}]
 end
 ```
 
