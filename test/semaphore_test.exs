@@ -1,5 +1,6 @@
 defmodule SemaphoreTest do
   use ExUnit.Case, async: false
+  doctest Semaphore
 
   setup do
     Semaphore.reset(:foo)
@@ -31,6 +32,13 @@ defmodule SemaphoreTest do
     assert Semaphore.acquire(:foo, 1) == true
     assert Semaphore.acquire(:foo, 3) == true
     assert Semaphore.acquire(:foo, 3) == true
+  end
+
+  test "decrease max" do
+    assert Semaphore.acquire(:foo, 2) == true
+    assert Semaphore.acquire(:foo, 2) == true
+    assert Semaphore.acquire(:foo, 2) == false
+    assert Semaphore.acquire(:foo, 1) == false
   end
 
   test "call" do
