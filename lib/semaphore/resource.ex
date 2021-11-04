@@ -23,17 +23,15 @@ defmodule Semaphore.Resource do
       Acquires the underlying semaphore. If it is unavailable, it will block until
       the semaphore can be acquired.
       """
-      @spec acquire(timeout()) :: :ok
-      def acquire(timeout \\ :infinity),
-        do: Semaphore.Resource.acquire(__MODULE__, timeout)
+      @spec acquire() :: :ok
+      def acquire(), do: Semaphore.Resource.acquire(__MODULE__)
 
       @doc """
       Acquires the underlying semaphore, and then calls the given function.
       Afterwards it will release the underlying semaphore.
       """
-      @spec call((() -> result), timeout()) :: result when result: term()
-      def call(func, timeout \\ :infinity),
-        do: Semaphore.Resource.call(__MODULE__, func, timeout)
+      @spec call((() -> result)) :: result when result: term()
+      def call(func), do: Semaphore.Resource.call(__MODULE__, func)
 
       @doc """
       Releases the underlying semaphore.
@@ -53,23 +51,18 @@ defmodule Semaphore.Resource do
   Acquires the underlying semaphore. If it is unavailable, it will block until
   the semaphore can be acquired.
   """
-  @spec acquire(pid(), timeout()) :: :ok
-  def acquire(pid, timeout \\ :infinity) do
-    if GenServer.call(pid, :acquire) do
-      :ok
-    else
-      GenServer.call(pid, :wait, timeout)
-      acquire(pid)
-    end
+  @spec acquire(pid()) :: :ok
+  def acquire(pid) do
+    GenServer.call(pid, :acquire, :infinity)
   end
 
   @doc """
   Acquires the underlying semaphore, and then calls the given function.
   Afterwards it will release the underlying semaphore.
   """
-  @spec call(pid(), (() -> result), timeout()) :: result when result: term()
-  def call(pid, func, timeout \\ :infinity) do
-    acquire(pid, timeout)
+  @spec call(pid(), (() -> result)) :: result when result: term()
+  def call(pid, func) do
+    acquire(pid)
 
     try do
       func.()
@@ -88,25 +81,27 @@ defmodule Semaphore.Resource do
 
   @impl GenServer
   def init({name, max}) do
-    {:ok, %{name: name, max: max, waiting: []}}
+    {:ok, %{name: name, max: max, waiting: :queue.new()}}
   end
 
   @impl GenServer
-  def handle_call(:acquire, _from, %{name: name, max: max} = state) do
-    {:reply, Semaphore.acquire(name, max), state}
+  def handle_call(:acquire, from, %{name: name, max: max, waiting: waiting} = state) do
+    if Semaphore.acquire(name, max) do
+      {:reply, :ok, state}
+    else
+      {:noreply, %{state | waiting: :queue.in(from, waiting)}}
+    end
   end
 
   @impl GenServer
   def handle_call(:release, _from, %{name: name, waiting: waiting} = state) do
-    waiting
-    |> Enum.reverse()
-    |> Enum.each(&GenServer.reply(&1, :ok))
+    case :queue.out(waiting) do
+      {{:value, next}, waiting} ->
+        GenServer.reply(next, :ok)
+        {:reply, :ok, %{state | waiting: waiting}}
 
-    {:reply, Semaphore.release(name), %{state | waiting: []}}
-  end
-
-  @impl GenServer
-  def handle_call(:wait, from, %{waiting: waiting} = state) do
-    {:noreply, %{state | waiting: [from | waiting]}}
+      _ ->
+        {:reply, Semaphore.release(name), state}
+    end
   end
 end
