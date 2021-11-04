@@ -51,7 +51,7 @@ defmodule Semaphore.Resource do
   Acquires the underlying semaphore. If it is unavailable, it will block until
   the semaphore can be acquired.
   """
-  @spec acquire(pid()) :: :ok
+  @spec acquire(GenServer.server()) :: :ok
   def acquire(pid) do
     GenServer.call(pid, :acquire, :infinity)
   end
@@ -60,7 +60,7 @@ defmodule Semaphore.Resource do
   Acquires the underlying semaphore, and then calls the given function.
   Afterwards it will release the underlying semaphore.
   """
-  @spec call(pid(), (() -> result)) :: result when result: term()
+  @spec call(GenServer.server(), (() -> result)) :: result when result: term()
   def call(pid, func) do
     acquire(pid)
 
@@ -74,7 +74,7 @@ defmodule Semaphore.Resource do
   @doc """
   Releases the underlying semaphore.
   """
-  @spec release(pid()) :: :ok
+  @spec release(GenServer.server()) :: :ok
   def release(pid), do: GenServer.call(pid, :release)
 
   ## Private
@@ -93,7 +93,6 @@ defmodule Semaphore.Resource do
     end
   end
 
-  @impl GenServer
   def handle_call(:release, _from, %{name: name, waiting: waiting} = state) do
     case :queue.out(waiting) do
       {{:value, next}, waiting} ->
