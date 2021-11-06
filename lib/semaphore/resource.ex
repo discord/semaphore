@@ -1,6 +1,8 @@
 defmodule Semaphore.Resource do
   use GenServer
 
+  @default_sweep_interval 5000
+
   defmacro __using__(opts \\ []) do
     max = Keyword.get(opts, :max, 1)
 
@@ -41,10 +43,23 @@ defmodule Semaphore.Resource do
     end
   end
 
-  @spec start_link(name :: atom(), max :: integer, Keyword.t()) ::
+  defmodule State do
+    @type t :: %__MODULE__{
+            name: term(),
+            max: integer(),
+            current: MapSet.t(GenServer.from()),
+            waiting: :queue.queue(GenServer.from()),
+            sweep_interval: non_neg_integer()
+          }
+    @enforce_keys [:name, :max, :current, :waiting, :sweep_interval]
+    defstruct [:name, :max, :current, :waiting, :sweep_interval]
+  end
+
+  @spec start_link(name :: term(), max :: integer, Keyword.t()) ::
           GenServer.on_start()
   def start_link(name, max, opts \\ []) when is_atom(name) do
-    GenServer.start_link(__MODULE__, {name, max}, opts)
+    sweep_interval = Keyword.get(opts, :sweep_interval, @default_sweep_interval)
+    GenServer.start_link(__MODULE__, {name, max, sweep_interval}, opts)
   end
 
   @doc """
@@ -80,27 +95,94 @@ defmodule Semaphore.Resource do
   ## Private
 
   @impl GenServer
-  def init({name, max}) do
-    {:ok, %{name: name, max: max, waiting: :queue.new()}}
+  def init({name, max, sweep_interval}) do
+    schedule_sweep(sweep_interval)
+
+    {:ok,
+     %State{
+       name: name,
+       max: max,
+       waiting: :queue.new(),
+       current: MapSet.new(),
+       sweep_interval: sweep_interval
+     }}
   end
 
   @impl GenServer
-  def handle_call(:acquire, from, %{name: name, max: max, waiting: waiting} = state) do
+  def handle_call(
+        :acquire,
+        from,
+        %State{
+          name: name,
+          max: max,
+          waiting: waiting,
+          current: current
+        } = state
+      ) do
     if Semaphore.acquire(name, max) do
-      {:reply, :ok, state}
+      {:reply, :ok, %State{state | current: MapSet.put(current, from)}}
     else
-      {:noreply, %{state | waiting: :queue.in(from, waiting)}}
+      {:noreply, %State{state | waiting: :queue.in(from, waiting)}}
     end
   end
 
-  def handle_call(:release, _from, %{name: name, waiting: waiting} = state) do
+  def handle_call(:release, from, state) do
+    {:reply, :ok, do_release(from, state)}
+  end
+
+  @spec do_release(GenServer.from(), State.t()) :: State.t()
+  defp do_release(
+         from,
+         %State{
+           name: name,
+           waiting: waiting,
+           current: current
+         } = state
+       ) do
     case :queue.out(waiting) do
-      {{:value, next}, waiting} ->
-        GenServer.reply(next, :ok)
-        {:reply, :ok, %{state | waiting: waiting}}
+      {{:value, {pid, _} = next}, waiting} ->
+        if Process.alive?(pid) do
+          GenServer.reply(next, :ok)
+
+          %State{
+            state
+            | waiting: waiting,
+              current:
+                current
+                |> MapSet.delete(from)
+                |> MapSet.put(next)
+          }
+        else
+          do_release(from, %State{state | waiting: waiting})
+        end
 
       _ ->
-        {:reply, Semaphore.release(name), state}
+        Semaphore.release(name)
+        %State{state | current: MapSet.new()}
     end
+  end
+
+  @impl GenServer
+  def handle_info(:sweep, state) do
+    {:noreply, do_sweep(state)}
+  end
+
+  defp schedule_sweep(interval) do
+    Process.send_after(self(), :sweep, interval)
+  end
+
+  defp do_sweep(%State{current: current, sweep_interval: sweep_interval} = state) do
+    new_state =
+      Enum.reduce(current, state, fn {pid, _} = client, state ->
+        if Process.alive?(pid) do
+          state
+        else
+          do_release(client, state)
+        end
+      end)
+
+    schedule_sweep(sweep_interval)
+
+    new_state
   end
 end

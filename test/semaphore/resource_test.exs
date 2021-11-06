@@ -46,4 +46,26 @@ defmodule Semaphore.ResourceTest do
     assert Task.await(task) == :ok
     assert Semaphore.count(FooResource) == 0
   end
+
+  test "sweep" do
+    # Spawn a process that will exit due to a linked process exiting.
+    {pid, ref} =
+      spawn_monitor(fn ->
+        FooResource.call(fn ->
+          spawn_link(fn -> exit(:ded) end)
+          Process.sleep(:infinity)
+        end)
+      end)
+
+    # Wait for the process to die.
+    assert_receive {:DOWN, ^ref, :process, ^pid, :ded}
+    # The leak should have occurred.
+    assert Semaphore.count(FooResource) == 1
+
+    FooResource |> send(:sweep)
+    Process.sleep(1)
+
+    # The leak should now be fixed.
+    assert Semaphore.count(FooResource) == 0
+  end
 end
