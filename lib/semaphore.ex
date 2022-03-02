@@ -91,14 +91,12 @@ defmodule Semaphore do
   def call_linksafe(name, max, func) do
     if acquire(name, max) do
       safe_key = {name, self()}
-      inserted = ETS.insert_new(@call_safe_table, [safe_key])
+      ETS.insert(@call_safe_table, [safe_key])
       try do
         func.()
       after
-        if inserted do
-          ETS.delete(@call_safe_table, safe_key)
-        end
         release(name)
+        ETS.delete_object(@call_safe_table, safe_key)
       end
     else
       {:error, :max}
@@ -109,7 +107,7 @@ defmodule Semaphore do
 
   def init(sweep_interval) do
     ETS.new(@table, [:set, :public, :named_table, {:write_concurrency, true}])
-    ETS.new(@call_safe_table, [:set, :public, :named_table, {:write_concurrency, true}])
+    ETS.new(@call_safe_table, [:bag, :public, :named_table, {:write_concurrency, true}])
     {:ok, sweep_interval, sweep_interval}
   end
 
