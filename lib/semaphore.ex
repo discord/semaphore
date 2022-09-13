@@ -46,9 +46,9 @@ defmodule Semaphore do
   `call_linksafe`, tThis function has higher overhead than `acquire/2`.
   """
   @spec acquire_linksafe(term, any, integer) :: boolean
-  def acquire_linksafe(name, semaphore_key, max) do
+  def acquire_linksafe(name, id, max) do
     if acquire(name, max) do
-      safe_key = {name, self(), semaphore_key}
+      safe_key = {name, self(), id}
 
       ETS.insert_new(@call_safe_table, [safe_key])
     else
@@ -63,8 +63,8 @@ defmodule Semaphore do
   `call_linksafe`, tThis function has higher overhead than `acquire/2`.
   """
   @spec release_linksafe(term, any) :: :ok
-  def release_linksafe(name, semaphore_key) do
-    safe_key = {name, self(), semaphore_key}
+  def release_linksafe(name, id) do
+    safe_key = {name, self(), id}
 
     release(name)
     ETS.delete(@call_safe_table, safe_key)
@@ -153,7 +153,7 @@ defmodule Semaphore do
 
   defp do_sweep() do
     ETS.foldl(
-      fn {name, pid, _key} = key, :ok ->
+      fn {name, pid, _id} = key, :ok ->
         with false <- Process.alive?(pid),
              1 <- :ets.select_delete(@call_safe_table, [{key, [], [true]}]) do
           release(name)
