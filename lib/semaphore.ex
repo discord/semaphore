@@ -50,7 +50,12 @@ defmodule Semaphore do
     if acquire(name, max) do
       safe_key = {name, self(), id}
 
-      ETS.insert_new(@call_safe_table, [safe_key])
+      if ETS.insert_new(@call_safe_table, [safe_key]) do
+        true
+      else
+        release(name)
+        false
+      end
     else
       false
     end
