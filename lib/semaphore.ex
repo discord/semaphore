@@ -16,6 +16,7 @@ defmodule Semaphore do
     sweep_interval = Application.get_env(:semaphore, :sweep_interval, 5_000)
     GenServer.start_link(__MODULE__, sweep_interval, name: __MODULE__)
   end
+
   ## Client API
 
   @doc """
@@ -35,6 +36,38 @@ defmodule Semaphore do
   @spec release(term) :: :ok
   def release(name) do
     ETS.update_counter(@table, name, {2, -1, 0, 0})
+    :ok
+  end
+
+  @doc """
+  Acquire a semaphore, incrementing the internal count by one.
+
+  If the current process exits without releasing the semaphore, it will be automatically swept in the background. Like
+  `call_linksafe`, tThis function has higher overhead than `acquire/2`.
+  """
+  @spec acquire_linksafe(term, any, integer) :: boolean
+  def acquire_linksafe(name, semaphore_key, max) do
+    if acquire(name, max) do
+      safe_key = {name, self(), semaphore_key}
+
+      ETS.insert_new(@call_safe_table, [safe_key])
+    else
+      false
+    end
+  end
+
+  @doc """
+  Release a semaphore, decrementing the internal count by one.
+
+  If the current process exits without releasing the semaphore, it will be automatically swept in the background. Like
+  `call_linksafe`, tThis function has higher overhead than `acquire/2`.
+  """
+  @spec release_linksafe(term, any) :: :ok
+  def release_linksafe(name, semaphore_key) do
+    safe_key = {name, self(), semaphore_key}
+
+    release(name)
+    ETS.delete(@call_safe_table, safe_key)
     :ok
   end
 
@@ -90,7 +123,7 @@ defmodule Semaphore do
   def call_linksafe(_name, 0, _func), do: {:error, :max}
   def call_linksafe(name, max, func) do
     if acquire(name, max) do
-      safe_key = {name, self()}
+      safe_key = {name, self(), nil}
       inserted = ETS.insert_new(@call_safe_table, [safe_key])
       try do
         func.()
@@ -120,7 +153,7 @@ defmodule Semaphore do
 
   defp do_sweep() do
     ETS.foldl(
-      fn ({name, pid} = key, :ok) ->
+      fn {name, pid, _key} = key, :ok ->
         with false <- Process.alive?(pid),
              1 <- :ets.select_delete(@call_safe_table, [{key, [], [true]}]) do
           release(name)
