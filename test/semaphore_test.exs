@@ -141,4 +141,22 @@ defmodule SemaphoreTest do
     Semaphore.release_linksafe(:name, :key2)
     assert Semaphore.count(:name) == 0
   end
+
+  test "acquire_linksafe dedupe" do
+    assert Semaphore.acquire_linksafe(:name, :key, 2)
+
+    refute Semaphore.acquire_linksafe(:name, :key, 2)
+
+    assert Semaphore.acquire_linksafe(:name, :key2, 2)
+
+    assert Semaphore.count(:name) == 2
+
+    Semaphore.release_linksafe(:name, :key)
+
+    assert Semaphore.acquire_linksafe(:name, :key, 2)
+    
+    Semaphore.release_linksafe(:name, :key)
+
+    Semaphore.release_linksafe(:name, :key2)
+  end
 end
