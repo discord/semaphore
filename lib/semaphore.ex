@@ -48,9 +48,9 @@ defmodule Semaphore do
   @spec acquire_linksafe(term, any, integer) :: boolean
   def acquire_linksafe(name, id, max) do
     if acquire(name, max) do
-      safe_key = {{name, self(), id}}
+      safe_key = {name, self(), id}
 
-      if ETS.insert_new(@call_safe_table, [safe_key]) do
+      if ETS.insert_new(@call_safe_table, {safe_key}) do
         true
       else
         release(name)
@@ -69,7 +69,7 @@ defmodule Semaphore do
   """
   @spec release_linksafe(term, any) :: :ok
   def release_linksafe(name, id) do
-    safe_key = {{name, self(), id}}
+    safe_key = {name, self(), id}
 
     release(name)
     ETS.delete(@call_safe_table, safe_key)
@@ -128,8 +128,8 @@ defmodule Semaphore do
   def call_linksafe(_name, 0, _func), do: {:error, :max}
   def call_linksafe(name, max, func) do
     if acquire(name, max) do
-      safe_key = {{name, self(), nil}}
-      inserted = ETS.insert_new(@call_safe_table, safe_key)
+      safe_key = {name, self(), nil}
+      inserted = ETS.insert_new(@call_safe_table, {safe_key})
       try do
         func.()
       after
