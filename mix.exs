@@ -4,7 +4,7 @@ defmodule Semaphore.Mixfile do
   def project do
     [
       app: :semaphore,
-      version: "1.2.0",
+      version: "1.3.0",
       elixir: "~> 1.3",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
