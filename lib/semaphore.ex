@@ -21,12 +21,31 @@ defmodule Semaphore do
 
   @doc """
   Acquire a semaphore, incrementing the internal count by one.
+
+  The semaphore's `name` can be any Elixir value.  The `max` count for the semaphore is passed on
+  every `acquire` call.  If the `max` is increased, the semaphore's count is preserved.  If the
+  `max` is decreased to a value lower than the current count, the count will be set to the new
+  `max`.
+
+  ## Example:
+
+      iex> Semaphore.acquire(:sem, 2)
+      true
+      iex> Semaphore.acquire(:sem, 2)
+      true
+      iex> Semaphore.acquire(:sem, 2)
+      false
+      iex> Semaphore.acquire(:sem, 3)
+      true
+      iex> Semaphore.acquire(:sem, 1)
+      false
+      iex> Semaphore.count(:sem)
+      1
   """
   @spec acquire(term, integer) :: boolean
   def acquire(name, max) do
     case ETS.update_counter(@table, name, [{2, 0}, {2, 1, max, max}], {name, 0}) do
-      [^max, _] -> false
-      _ -> true
+      [old_val, new_val] -> old_val < new_val
     end
   end
 
